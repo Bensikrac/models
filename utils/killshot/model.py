@@ -3,6 +3,7 @@ import random
 
 import PIL
 import torch
+import torchvision.utils
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 from torchvision import datasets, transforms
@@ -10,28 +11,39 @@ import torchvision.models as models
 import pandas as pd
 from torchvision.io import read_image
 from torch.utils.data import DataLoader
+import matplotlib.pyplot as plt
+import numpy as np
+
+
+def imshow(img):
+    # img = img / 2 + 0.5  # unnormalize
+    npimg = img.numpy()
+    plt.imshow(np.transpose(npimg, (1, 2, 0)))
+    plt.show()
 
 
 def main():
     # init device
-    #device = (
-    #    "cuda"
-    #    if torch.cuda.is_available()
-    #    else "mps"
-    #    if torch.backends.mps.is_available()
-    #    else "cpu"
-    #)
+    device = (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
+    )
     device = "cpu"
     print(f"Using {device} device")
     model = NeuralNetwork().to(device)
     print(model)
 
-    training_data = CustomImageDataset(annotations_file="annotations.csv", img_dir="images")
-    train_dataloader = DataLoader(training_data, batch_size=64, shuffle=True)
+    training_data = CustomImageDataset(annotations_file="annotations.csv", img_dir="F:/datascience/waldo/images")
+    train_dataloader = DataLoader(training_data, batch_size=1, shuffle=True)
 
-    train_features, train_labels = next(iter(train_dataloader))
-    print(f"Feature batch shape: {train_features.size()}")
-    print(f"Labels batch shape: {train_labels.size()}")
+    images, labels = next(iter(train_dataloader))
+    print(f"Feature batch shape: {images.size()}")
+    print(f"Labels batch shape: {labels.size()}")
+    print(images, labels)
+    imshow(torchvision.utils.make_grid(images))
 
     # Learn here
     learning_rate = 1e-3
@@ -92,20 +104,38 @@ def test_loop(dataloader, model, loss_fn):
 
 
 class NeuralNetwork(nn.Module):
-    def __init__(self):
+    """def __init__(self):
         super().__init__()
         self.flatten = nn.Flatten()
         self.linear_relu_stack = nn.Sequential(
             nn.Linear(1920 * 1080, 256),
             nn.ReLU(),
             nn.Linear(256, 1)
-        )
+        )"""
 
-    def forward(self, x):
+    def __init__(self):
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 6, 5)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(6, 16, 5)
+        self.fc1 = nn.Linear(16 * 5 * 5, 120)
+        self.fc2 = nn.Linear(120, 84)
+        self.fc3 = nn.Linear(84, 10)
+
+    """def forward(self, x):
         x = self.flatten(x)
         logits = self.linear_relu_stack(x)
         return logits
+    """
 
+    def forward(self, x):
+        x = self.pool(nn.functional.relu(self.conv1(x)))
+        x = self.pool(nn.functional.relu(self.conv2(x)))
+        x = torch.flatten(x, 1)  # flatten all dimensions except batch
+        x = nn.functional.relu(self.fc1(x))
+        x = nn.functional.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
 
 class CustomImageDataset(Dataset):
     def __init__(self, annotations_file, img_dir, transform=None, target_transform=None):
